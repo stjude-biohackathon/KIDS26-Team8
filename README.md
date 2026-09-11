@@ -36,4 +36,111 @@ Naming the tools and stack early helps the team lead create useful roles and div
 
 The goal is not a perfect production system. The goal is a clear, honest, useful result that the team can explain and others can build on.
 
+## Sample Segmentation Pipeline
+
+### Ilastik Annotation
+
+The goal of this step is to create a probability mask for each training volume using ilastik.
+
+1. **Create a Pixel Classification project**
+   - Open ilastik and create a new **Pixel Classification** project.
+
+2. **Add input data**
+   - Add multiple `.tif` volumes as **separate images** within the same project.
+   - Do **not** load the volumes as a sequence.
+
+3. **Select features**
+   - Choose feature scales based on the approximate size of the nuclei.
+   - For example, for nuclei approximately 15 pixels in diameter, the ideal scale is approximately:
+     
+     `σ = 15 / 2 = 7.5`
+     
+   - Select several scales around this value. For example:
+     
+     `σ = 1.6, 3.5, 10`
+
+4. **Annotate the images**
+   - Annotate the volumes sparsely.
+   - A few representative pixels for each class are sufficient; it is not necessary to manually segment entire nuclei.
+
+5. **Configure export settings**
+   - Export the probability maps as **HDF5 (`.h5`)** files.
+   - Use the following settings:
+     - **Data type:** `float32`
+     - **Axis order:** `zyxc`
+     - **Dataset name:** `exported_data`
+     - **Output filename:**
+       
+     `{dataset_dir}/probabilities/{nickname}_{result_type}.h5`
+
+6. **Export probability maps**
+   - Select **Export All**.
+   - ilastik will create one `.h5` probability file for each input volume.
+
+---
+
+### Prepare Training Data
+
+The goal of this step is to format the training data for the U-Net.
+
+#### 1. Binarize the Probability Maps
+
+Convert each probability map produced by ilastik into a binary segmentation mask by thresholding.
+
+- Run `proba_to_binary.py` on each probability map.
+- Save the resulting binary masks in a `masks/` directory.
+
+For example:
+
+```text
+data/
+├── raw/
+├── probabilities/
+└── masks/
+```
+
+#### 2. Chunk Data (Raw Volumes and Masks)
+
+Split both the raw image volumes and their corresponding binary masks into smaller chunks for U-Net training.
+
+Chunking is important for two main reasons:
+
+- **GPU memory:** Each training batch must fit into GPU memory. Smaller 3D volumes reduce the memory required during training.
+- **U-Net pooling compatibility:** The spatial dimensions of each chunk should be compatible with the pooling operations in the U-Net.
+
+In general, each spatial dimension should be divisible by `2^N`, where `N` is the number of pooling layers.
+
+For example:
+
+- 3 pooling layers → dimensions divisible by `8`
+- 4 pooling layers → dimensions divisible by `16`
+
+In the sample pipeline, the chunk size used is:
+
+```text
+128 × 128 × 128
+```
+
+Run `extract_chunks.py` on each raw volume and its corresponding binary mask.
+
+The chunked data can be saved in:
+
+```text
+raw_chunked/
+masks_chunked/
+```
+
+A typical data organization is:
+
+```text
+data/
+├── raw/
+├── probabilities/
+├── masks/
+├── raw_chunked/
+└── masks_chunked/
+```
+
+Each raw chunk should have a corresponding mask chunk with the same spatial dimensions.
+
 
