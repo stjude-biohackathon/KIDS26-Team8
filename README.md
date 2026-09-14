@@ -20,7 +20,7 @@ of the Human Brain Optimized Light-sheet (HOLiS) NIH project (total dataset > 6 
 - **Expected output:** Additional nuclear segmentation pipeline options, balancing segmentation or expression alignment accuracy with runtime and memory efficiency. Benchmarked against our baseline approaches (binarization and 3D U-Net), including lightweight quality-control or confidence metrics. Pipeline options should be scalable and suitable for integration into large-scale analysis workflows.
 - **Tools and stack:**  Helpful analysis and visualization tools include, but are not limited to: Python, PyTorch, Slurm, Neuroglancer, Ilastik, and existing segmentation methods. 
 - **Team leads:** Caitlin Freeman ([@caitlinfree](https://github.com/caitlinfree)) and Peter Simko ([@ps3348](https://github.com/ps3348))
-- **Team members and roles:** project-management/team.md
+- **Team members and roles:** [project-management/team.md](https://github.com/stjude-biohackathon/KIDS26-Team8/blob/main/project-management/team.md)
 - **Communication:** https://app.slack.com/client/T04JD4M0H29/C0BT8BBGWP2
 
 
