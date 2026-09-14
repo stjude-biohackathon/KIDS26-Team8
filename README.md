@@ -1,30 +1,41 @@
-# Biohackathon Project Template
-
-This repository is a starting point for a three-day team project. This repository is populated with a starting template for team organization and planning. Use it to plan, build, and document work. Please adjust this repository to suit the needs of your team.
-
-> **Team leads:** Start with the [team lead checklist](project-management/CHECKLIST.md) before the event or during your first team meeting.
+# Counting every cell in the human brain: 3D localization of cell nuclei
 
 ## Project Profile
 
-- **Project name:** [Add a short, descriptive name]
-- **Question, problem, or opportunity:** [What are you exploring?]
-- **Data, inputs, or evidence:** [What will you use, and where does it come from?]
-- **Expected output:** [What will you show, test, explain, or demonstrate?]
-- **Tools and stack:** [Languages, libraries, notebooks, APIs, databases, services, or other tools]
-- **Team lead:** [Name and GitHub handle]
-- **Team members and roles:** [Link to `project-management/team.md`]
-- **Communication:** [Add the agreed channel or contact]
+- **Name:** Counting every cell in the human brain: 3D localization of cell nuclei
+- **Question:** Our goal is to accurately detect and localize nuclei while minimizing computational cost, enabling analysis at whole-human-brain scale (>150 billion cells).
+- **Data:** Participants will have access to a subset of volumetric microscopy data acquired as part
+of the Human Brain Optimized Light-sheet (HOLiS) NIH project (total dataset > 6 PB!).
 
-Naming the tools and stack early helps the team lead create useful roles and divide work realistically. It is fine to revise this section as the project develops.
+  The dataset was collected on 5 mm thick optically cleared coronal human hemibrain slabs stained with a nuclear dye and 4 immunohistochemistry markers and imaged using a custom oblique-plane single-objective light-sheet microscopy system. The main data is several 3D strips of nuclear channel data from three different brain regions representing expected variations in cellular density. Additional data includes four auxiliary imaging channels for antibody-based labeling (e.g., vasculature markers).
+
+   The volumetric microscopy data is provided by the Hillman Lab who designed and
+   built the HOLiS microscope and performed the imaging.
+
+   Immunostaining was performed by the Wu Lab at the Weill Cornell Medicine Helen &
+   Robert Appel Alzheimer’s Disease Research Institute, with brain tissue provided by Dr
+   John Crary, Director of Mt Sinai’s Neuropathology Brain Bank.
+   Data is used for segmentation validation but will not be publicly posted at the
+   conclusion of the BioHackathon.
+- **Expected output:** Additional nuclear segmentation pipeline options, balancing segmentation or expression alignment accuracy with runtime and memory efficiency. Benchmarked against our baseline approaches (binarization and 3D U-Net), including lightweight quality-control or confidence metrics. Pipeline options should be scalable and suitable for integration into large-scale analysis workflows.
+- **Tools and stack:**  Helpful analysis and visualization tools include, but are not limited to: Python, PyTorch, Slurm, Neuroglancer, Ilastik, and existing segmentation methods. 
+- **Team leads:** Caitlin Freeman ([@caitlinfree](https://github.com/caitlinfree)) and Peter Simko ([@ps3348](https://github.com/ps3348))
+- **Team members and roles:** [Link to `project-management/team.md`]
+- **Communication:** https://app.slack.com/client/T04JD4M0H29/C0BT8BBGWP2
+
 
 ## Vision and Mission
 
-- **Vision:** [Describe the change, insight, or capability you hope this project supports.]
-- **Mission:** [Describe what the team will do during the biohackathon to move toward that vision.]
+- **Vision:** Enable scalable, accurate analysis of the human brain at cellular resolution, providing new insight into how cellular organization changes across individuals, development, and neurological and psychiatric disease.
+- **Mission:** Develop and benchmark efficient, accurate methods for 3D nuclear segmentation and localization in large-scale volumetric microscopy data. By improving segmentation speed, accuracy, quality control, and pipeline throughput, we aim to make analysis of massive whole-brain datasets more accessible and enable quantitative comparisons of cellular organization across human brains.
 
 ## About
 
-[Add a short explanation of the motivation, background, and why the question or problem matters.]
+The data used for this challenge were generated as part of an NIH BRAIN Initiative project focused on building the first dataset surveying the human brain at cellular resolution. This resource provides an unprecedented view of the cellular organization of the human brain, creating opportunities to better understand the biological basis of brain function in both health and disease.
+
+Accurate and scalable nuclear segmentation and localization are essential first steps in analyzing these datasets. Because the data exceed 6 PB and contain billions of cells across enormous volumetric scales, they must be reduced into simpler, accessible representations that enable quantitative analysis of cell-type distributions. Even modest improvements in segmentation speed or accuracy could dramatically accelerate downstream analysis and make it feasible to analyze multiple human brains.
+
+Large-scale comparisons across individuals, developmental stages, and disease states are essential for understanding how neurological and psychiatric diseases alter brain anatomy and cellular organization. The resulting insights could help identify potential therapeutic targets and inform future clinical interventions. Additionally, methods developed through this challenge could extend beyond neuroscience to other large-scale volumetric imaging applications, including different microscopy modalities, biological tissues, and biomedical imaging workflows.
 
 ## Roadmap and Milestones
 
@@ -34,7 +45,6 @@ Naming the tools and stack early helps the team lead create useful roles and div
 | Day 2 | Build, test, and compare approaches | A working result or clear evidence about what does not work |
 | Day 3 | Stabilize, document, and present | A demo or handoff with methods, limitations, and next steps |
 
-The goal is not a perfect production system. The goal is a clear, honest, useful result that the team can explain and others can build on.
 
 ## Sample Segmentation Pipeline
 
@@ -142,5 +152,136 @@ data/
 ```
 
 Each raw chunk should have a corresponding mask chunk with the same spatial dimensions.
+
+---
+
+### Train the U-Net
+
+To train the U-Net, run:
+
+```bash
+python main.py
+```
+
+Run the training script in the appropriate PyTorch environment on a GPU node.
+
+The output of the training process is a trained model.
+
+#### Hyperparameters
+
+Before starting training, set the main hyperparameters in `main.py`:
+
+- **Learning Rate**  
+  Controls the size of each optimization step.
+
+- **Batch Size**  
+  Number of training volumes processed together in each batch.  
+  The batch size must be chosen so that the full batch fits into GPU memory.
+
+- **Number of Epochs**  
+  Number of complete passes through the training dataset.
+
+- **Validation Split**  
+  Fraction of the dataset reserved for validation.
+
+- **Number of U-Net Layers**  
+  Choose either a **3-layer** or **4-layer** U-Net.
+
+  - 3 layers → input dimensions should generally be divisible by `8`
+  - 4 layers → input dimensions should generally be divisible by `16`
+
+- **Class Weight**  
+  Used to account for the imbalance between background and nuclei pixels.
+
+  A reasonable starting value is:
+
+  ```text
+  class weight = number of negative pixels / number of positive pixels
+  ```
+
+  where:
+
+  - **negative pixels** = background pixels
+  - **positive pixels** = nuclei pixels
+
+---
+
+### Prediction
+
+After training, use the trained U-Net model to predict nuclei on a new input volume.
+
+Run:
+
+```bash
+python predict_volume.py \
+    --model path/to/model \
+    --input path/to/input_chunk \
+    --out-dir path/to/output_dir
+```
+
+The prediction script outputs:
+
+- **Binary segmentation mask** (`mask.tif`)
+- **Nuclei coordinates** (`centroids.csv`)
+
+Both outputs are written to the directory specified by `--out-dir`.
+
+For example:
+
+```text
+out/
+├── mask.tif
+└── centroids.csv
+```
+
+The binary mask contains the predicted nuclei segmentation, while `centroids.csv` contains the coordinates of the detected nuclei.
+
+---
+
+### Possible Ideas to Pursue
+
+#### 1. Detect and Split Nuclei Blobs
+
+We have previously experimented with **dynamic thresholding** to separate nuclei that are incorrectly merged into large blobs.
+
+Possible approach:
+
+1. Run prediction using an initial segmentation threshold.
+2. Detect connected components in the resulting mask with unusually large volumes.
+3. Re-run segmentation on those regions using a stricter threshold.
+4. If the large connected component splits into multiple smaller components, keep the segmentation produced using the stricter threshold.
+
+#### 2. Preprocess Data
+
+Investigate whether additional preprocessing improves segmentation performance.
+
+Possible preprocessing steps include:
+
+- **Scaling**
+- **Normalization**
+- **Pattern correction**, for example using `BaSiCPy`
+
+These preprocessing steps require additional computation and processing time. An important question is whether the resulting improvement in segmentation quality justifies the additional computational cost.
+
+#### 3. Hyperparameter Tuning
+
+Systematically evaluate different training hyperparameters to determine whether segmentation performance can be improved.
+
+Potential parameters to tune include:
+
+- Learning rate
+- Batch size
+- Number of epochs
+- Number of U-Net layers
+- Class weight
+
+#### 4. Validation
+
+Training currently evaluates segmentation primarily using **pixel-wise accuracy metrics**.
+
+Investigate whether validation can be extended to include **object-wise (nuclei-wise) metrics** without substantially increasing training time.
+
+Object-wise validation could help evaluate whether individual nuclei are correctly detected and separated, rather than only measuring agreement at the pixel level.
+
 
 
