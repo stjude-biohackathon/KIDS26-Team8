@@ -155,3 +155,6 @@ dmypy.json
 .pyre/
 .myenv/
 requirements.txt
+
+# Local segmentation benchmark data and generated runs
+benchmark-runs/
