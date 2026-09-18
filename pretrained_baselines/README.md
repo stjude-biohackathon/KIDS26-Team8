@@ -29,9 +29,7 @@ Tuned configuration: `cellprob_threshold=-3`, `tile_norm_blocksize=100`, `diamet
 All predicted masks are instance-labeled TIFFs (each nucleus a unique integer, 0 = background).
 They are too large for git and live on the HPC home directory, not in this repo.
 
-`view_chunk.py` opens the raw volume plus any masks as toggleable napari layers. Run it from a
-napari-enabled Python environment (e.g. an OnDemand remote desktop session), **not** the
-headless login shell.
+`view_chunk.py` opens the raw volume plus any masks as toggleable napari layers. 
 
 ### Where everything is
 
@@ -49,39 +47,25 @@ The 96 test-split chunk names are the filenames in any of the `tier1/masks/` dir
 above, or the `chunk` column of the CSVs in `results/cellpose_sam/`. The three whole volumes
 are `chunk_z5_y36_x0.tif`, `chunk_z5_y45_x2500.tif`, `chunk_z5_y55_x5000.tif`.
 
-### Ready-to-run examples
+### relevant file paths
 
 Tuned vs. ground truth on a well-performing chunk (tuned F1@0.5 = 0.56):
 
-```bash
-python pretrained_baselines/view_chunk.py \
-  --raw /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw_chunked/chunk_z5_y55_x5000_z000000_y000768_x001024.tif \
-  --predicted /home/efoste34/cellpose_baseline/runs/cellpose_sam_tuned/slab21_pfCortex_chunks/tier1/masks/chunk_z5_y55_x5000_z000000_y000768_x001024.tif \
-  --ground-truth /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks_chunked/chunk_z5_y55_x5000_z000000_y000768_x001024.tif
-```
+raw: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw_chunked/chunk_z5_y55_x5000_z000000_y000768_x001024.tif
+predicted: /home/efoste34/cellpose_baseline/runs/cellpose_sam_tuned/slab21_pfCortex_chunks/tier1/masks/chunk_z5_y55_x5000_z000000_y000768_x001024.tif 
+ground-truth: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks_chunked/chunk_z5_y55_x5000_z000000_y000768_x001024.tif
 
-The dim chunk where ground truth is fragmented noise (see caveat below) — pass
-`--gt-mode binary` to see the raw Ilastik mask untouched:
+The dim chunk where ground truth is noisy
 
-```bash
-python pretrained_baselines/view_chunk.py \
-  --raw /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw_chunked/chunk_z5_y55_x5000_z000128_y000000_x000000.tif \
-  --predicted /home/efoste34/cellpose_baseline/runs/cellpose_sam_tuned/slab21_pfCortex_chunks/tier1/masks/chunk_z5_y55_x5000_z000128_y000000_x000000.tif \
-  --ground-truth /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks_chunked/chunk_z5_y55_x5000_z000128_y000000_x000000.tif \
-  --gt-mode binary
-```
+raw: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw_chunked/chunk_z5_y55_x5000_z000128_y000000_x000000.tif
+predicted: /home/efoste34/cellpose_baseline/runs/cellpose_sam_tuned/slab21_pfCortex_chunks/tier1/masks/chunk_z5_y55_x5000_z000128_y000000_x000000.tif
+ground-truth: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks_chunked/chunk_z5_y55_x5000_z000128_y000000_x000000.tif
 
 A dense whole volume (predicted 9,864 vs 16,350 GT nuclei at default settings):
 
-```bash
-python pretrained_baselines/view_chunk.py \
-  --raw /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw/chunk_z5_y55_x5000.tif \
-  --predicted /home/efoste34/cellpose_baseline/runs/cellpose_sam/slab21_pfCortex_chunks/tier2/masks/chunk_z5_y55_x5000.tif \
-  --ground-truth /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks/chunk_z5_y55_x5000.tif
-```
-
-To compare default vs tuned side by side, open the default mask as a second `--predicted`
-layer, or run the command twice.
+raw: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw/chunk_z5_y55_x5000.tif
+predicted: /home/efoste34/cellpose_baseline/runs/cellpose_sam/slab21_pfCortex_chunks/tier2/masks/chunk_z5_y55_x5000.tif
+ground-truth: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks/chunk_z5_y55_x5000.tif
 
 ## Setup
 
@@ -177,14 +161,5 @@ bsub < ~/cellpose_baseline/scripts/run_pfcortex_tuned.sh
 
 Environment: `~/.conda/envs/cellpose_env` (clone of the team `pytorch_v2` env; torch was
 upgraded to 2.14.0+cu130 there because cellpose requires numpy>=2, which the original
-torch 2.0.0 build is not ABI-compatible with). The shared team env is untouched.
+torch 2.0.0 build is not ABI-compatible with).
 
-## Known gaps
-
-- **Cerebellum has no usable test-split ground truth.** `masks_chunked_v2` covers only the 384
-  *train* chunks (verified: 0/96 overlap with the test split), and `masks_chunked` holds a
-  single file. Needs resolving with whoever owns the annotations before Cerebellum accuracy
-  numbers are possible; inference itself runs fine.
-- **Hippocampus** is not chunked, so it has no Tier-1 equivalent — only 3 whole volumes.
-- **µSAM** was not run. It needs its own conda env; installing it into `cellpose_env` would
-  disturb the torch/numpy pinning that Cellpose depends on here.
