@@ -22,7 +22,66 @@ pfCortex, all 96 chunks of the designated test split from `split_manifest.json`:
 | Chunks with total failure (F1=0) | 11 / 96 | **2 / 96** | −82% |
 | Runtime per 128³ chunk | 6.41 s | 6.43 s | unchanged |
 
-Tuned configuration: `cellprob_threshold=-3`, `tile_norm_blocksize=100`, `diameter` unset.
+Tuned configuration: `cellprob_threshold=-3`, `tile_norm_blocksize=100`, `diameter` left unset.
+
+## Viewing results in napari
+
+All predicted masks are instance-labeled TIFFs (each nucleus a unique integer, 0 = background).
+They are too large for git and live on the HPC home directory, not in this repo.
+
+`view_chunk.py` opens the raw volume plus any masks as toggleable napari layers. Run it from a
+napari-enabled Python environment (e.g. an OnDemand remote desktop session), **not** the
+headless login shell.
+
+### Where everything is
+
+| What | Path |
+| --- | --- |
+| Raw 128³ chunks | `/lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw_chunked/<chunk>.tif` |
+| Ilastik ground truth (binary) | `/lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks_chunked/<chunk>.tif` |
+| **Tuned** Cellpose-SAM masks | `/home/efoste34/cellpose_baseline/runs/cellpose_sam_tuned/slab21_pfCortex_chunks/tier1/masks/<chunk>.tif` |
+| Default Cellpose-SAM masks | `/home/efoste34/cellpose_baseline/runs/cellpose_sam/slab21_pfCortex_chunks/tier1/masks/<chunk>.tif` |
+| Raw whole volumes (256×1024×1280) | `/lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw/<volume>.tif` |
+| Whole-volume ground truth | `/lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks/<volume>.tif` |
+| Whole-volume Cellpose-SAM masks (default) | `/home/efoste34/cellpose_baseline/runs/cellpose_sam/slab21_pfCortex_chunks/tier2/masks/<volume>.tif` |
+
+The 96 test-split chunk names are the filenames in any of the `tier1/masks/` directories
+above, or the `chunk` column of the CSVs in `results/cellpose_sam/`. The three whole volumes
+are `chunk_z5_y36_x0.tif`, `chunk_z5_y45_x2500.tif`, `chunk_z5_y55_x5000.tif`.
+
+### Ready-to-run examples
+
+Tuned vs. ground truth on a well-performing chunk (tuned F1@0.5 = 0.56):
+
+```bash
+python pretrained_baselines/view_chunk.py \
+  --raw /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw_chunked/chunk_z5_y55_x5000_z000000_y000768_x001024.tif \
+  --predicted /home/efoste34/cellpose_baseline/runs/cellpose_sam_tuned/slab21_pfCortex_chunks/tier1/masks/chunk_z5_y55_x5000_z000000_y000768_x001024.tif \
+  --ground-truth /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks_chunked/chunk_z5_y55_x5000_z000000_y000768_x001024.tif
+```
+
+The dim chunk where ground truth is fragmented noise (see caveat below) — pass
+`--gt-mode binary` to see the raw Ilastik mask untouched:
+
+```bash
+python pretrained_baselines/view_chunk.py \
+  --raw /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw_chunked/chunk_z5_y55_x5000_z000128_y000000_x000000.tif \
+  --predicted /home/efoste34/cellpose_baseline/runs/cellpose_sam_tuned/slab21_pfCortex_chunks/tier1/masks/chunk_z5_y55_x5000_z000128_y000000_x000000.tif \
+  --ground-truth /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks_chunked/chunk_z5_y55_x5000_z000128_y000000_x000000.tif \
+  --gt-mode binary
+```
+
+A dense whole volume (predicted 9,864 vs 16,350 GT nuclei at default settings):
+
+```bash
+python pretrained_baselines/view_chunk.py \
+  --raw /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw/chunk_z5_y55_x5000.tif \
+  --predicted /home/efoste34/cellpose_baseline/runs/cellpose_sam/slab21_pfCortex_chunks/tier2/masks/chunk_z5_y55_x5000.tif \
+  --ground-truth /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks/chunk_z5_y55_x5000.tif
+```
+
+To compare default vs tuned side by side, open the default mask as a second `--predicted`
+layer, or run the command twice.
 
 ## Setup
 
@@ -32,7 +91,7 @@ Tuned configuration: `cellprob_threshold=-3`, `tile_norm_blocksize=100`, `diamet
 - **Ground truth**: Ilastik-derived binary masks, converted to instances via 26-connectivity
   connected components — the same approach used in `Unet/compare_pred_masks.py`
 
-## Parameter findings
+## Parameter tuning
 
 Swept on 5 chunks chosen to span the observed performance range, then the winner was
 confirmed on the full 96-chunk test split.
@@ -55,29 +114,12 @@ Clean optimum at −3 (−4 ties; below that it starts accepting noise). Adding
 light-sheet brightness varying across the volume — normalizing in local blocks stops bright
 regions from crushing dim ones.
 
-**`diameter` should be left unset — setting it actively hurts.** Cellpose-SAM is
-scale-invariant by design, and forcing a diameter degraded both accuracy *and* speed:
-
-| `diameter` | F1@0.5 | runtime / chunk |
-| ---: | ---: | ---: |
-| unset (default) | **0.251** | **6.4 s** |
-| 20 | 0.179 | 10.7 s |
-| 16 | 0.123 | 13.4 s |
-| 10 | (0 masks) | 78 s |
-| 6 | (0 masks) | 511 s |
-
-The runtime blowup is because a diameter triggers upscaling to Cellpose's ~30px reference
-scale — `diameter=6` means 5x per axis, i.e. 125x the voxels.
-
-**`flow_threshold` is a no-op here** — Cellpose's own docstring states it is not used for 3D,
-and all of our runs are 3D.
-
 ## Runtime and scaling
 
 | Input | Voxels | Runtime | Peak GPU memory |
 | --- | ---: | ---: | ---: |
 | 128³ chunk | 2.1 M | 6.4 s | 1,576 MB |
-| 256x1024x1280 whole volume | 336 M (160x) | 658 s (103x) | 1,576 MB |
+| 256×1024×1280 whole volume | 336 M (160×) | 658 s (103×) | 1,576 MB |
 
 Two useful properties for scaling toward whole-brain workloads: runtime scales **sub-linearly**
 with volume size, and **peak GPU memory is flat** regardless of input size, because Cellpose
