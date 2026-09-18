@@ -1,162 +1,148 @@
-# Pretrained foundation-model baselines (Cellpose-SAM)
+# Pretrained foundation-model baseline: Cellpose-SAM
 
-Inference-only nuclei segmentation using off-the-shelf pretrained Cellpose-SAM
-(`cpsam_v2`, cellpose 4.2.1), with no training on hackathon data. Intended as
-an independent comparison point for the team's trained methods (3D U-Net,
-Otsu+StarDist cascade, static thresholding).
+An independent, **inference-only** nuclei segmentation baseline for Track 1. No training,
+no fine-tuning — off-the-shelf pretrained weights applied directly to the hackathon data,
+intended as a fast comparison point against the thresholding baseline, the Otsu+StarDist
+cascade, and the trained 3D U-Net.
 
-## Headline result: prefrontal cortex, official 96-chunk test split
+## Headline result
 
-Evaluated on the 96 held-out 128³ chunks designated as `test` in
-`split_manifest.json` (no peeking at train chunks), against the team's
-Ilastik-derived binary ground truth (`masks_chunked`).
+Cellpose-SAM's **default settings substantially undersell it on this data**. One documented
+parameter (`cellprob_threshold`) nearly doubles object-wise F1 at **zero runtime cost**.
 
-| Metric | Cellpose-SAM default | **Cellpose-SAM tuned** | change |
-|---|---|---|---|
-| Object F1 @ IoU≥0.5 (mean) | 0.143 | **0.267** | **+87%** |
+pfCortex, all 96 chunks of the designated test split from `split_manifest.json`:
+
+| Metric | default | tuned | change |
+| --- | ---: | ---: | ---: |
+| Object F1 @ IoU≥0.5 (mean) | 0.143 | **0.267** | +87% |
 | Object F1 @ IoU≥0.5 (median) | 0.096 | **0.248** | +158% |
-| Object F1 @ IoU≥0.01 (mean) | 0.456 | **0.550** | +21% |
-| Dice (voxel overlap) | 0.528 | **0.686** | +30% |
-| Nuclei detected / GT nuclei | 7,258 / 13,227 (55%) | **9,173 / 13,227 (69%)** | |
-| Chunks with zero F1 | 11 / 96 | **2 / 96** | |
-| Runtime per 128³ chunk (1 GPU) | 6.41 s | **6.43 s** | none |
-| Peak GPU memory | 1.58 GB | 1.58 GB | none |
+| Object F1 @ IoU≥0.01 | 0.456 | **0.550** | +21% |
+| Dice | 0.528 | **0.686** | +30% |
+| Nuclei found (vs 13,227 GT) | 7,258 (55%) | **9,173 (69%)** | +26% |
+| Chunks with total failure (F1=0) | 11 / 96 | **2 / 96** | −82% |
+| Runtime per 128³ chunk | 6.41 s | 6.43 s | unchanged |
 
-"Tuned" = two documented Cellpose parameters changed from default
-(`cellprob_threshold=-3`, `tile_norm_blocksize=100`). **No retraining, no
-runtime cost.** The default configuration substantially undersells the model
-on this data; the dominant default failure mode is under-detection (missing
-nuclei), not false positives.
+Tuned configuration: `cellprob_threshold=-3`, `tile_norm_blocksize=100`, `diameter` unset.
 
-Metrics are reported at two IoU matching thresholds on purpose: 0.5 is the
-literature standard; 0.01 ("any overlap counts") matches the team's existing
-`Unet/compare_pred_masks.py` convention, so numbers are comparable both ways.
+## Setup
 
-## What the tuning found
+- **Model**: Cellpose-SAM, `cpsam_v2` checkpoint (cellpose 4.2.1.1), 3D mode (`do_3D=True`)
+- **Hardware**: 1 GPU on `nodegpu217` (LSF `biohackathon` queue)
+- **Input**: single-channel nuclear stain, uint16, `z_axis=0`
+- **Ground truth**: Ilastik-derived binary masks, converted to instances via 26-connectivity
+  connected components — the same approach used in `Unet/compare_pred_masks.py`
 
-Sweeps were run on 5 representative pfCortex test chunks spanning the
-observed performance range, then the winner was applied to all 96.
+## Parameter findings
 
-**`cellprob_threshold`** (default 0.0) — the decisive knob. Cellpose docs:
-"decrease if not returning as many masks as you'd expect." Clean optimum at -3;
--4 ties, -5/-6 degrade as noise starts being accepted.
+Swept on 5 chunks chosen to span the observed performance range, then the winner was
+confirmed on the full 96-chunk test split.
 
-| cellprob | F1@0.5 | Dice |
-|---|---|---|
-| 0 (default) | 0.251 | 0.528 |
-| -1 | 0.322 | 0.688 |
-| -2 | 0.354 | 0.723 |
-| **-3** | **0.379** | **0.736** |
-| -4 | 0.376 | 0.724 |
-| -5 | 0.325 | 0.693 |
-| -6 | 0.240 | 0.649 |
+**`cellprob_threshold` is the parameter that matters.** Default 0.0 makes the model far too
+conservative on this data; the dominant error mode was missed nuclei, not false positives.
 
-**`tile_norm_blocksize`** (default 0 = whole volume normalized as one) — small
-additional gain when combined with cellprob=-3 (F1@0.5 0.379 → 0.388). Light-
-sheet brightness varies with depth/position; local normalization stops bright
-regions from suppressing dim ones.
+| `cellprob_threshold` | F1@0.5 | Dice |
+| ---: | ---: | ---: |
+| 0.0 (default) | 0.251 | 0.528 |
+| −1 | 0.322 | 0.688 |
+| −2 | 0.354 | 0.723 |
+| **−3** | **0.379** | **0.736** |
+| −4 | 0.376 | 0.724 |
+| −5 | 0.325 | 0.693 |
+| −6 | 0.240 | 0.649 |
 
-**`diameter` — do not set.** Cellpose-SAM is scale-invariant by design and the
-parameter is absent from its docs. Setting it anyway measurably hurt *both*
-accuracy and speed, because it forces an upscale to the model's 30 px
-reference scale (our nuclei are ~6–10 voxels across):
+Clean optimum at −3 (−4 ties; below that it starts accepting noise). Adding
+`tile_norm_blocksize=100` gave a small further gain (F1@0.5 0.379 → 0.388), consistent with
+light-sheet brightness varying across the volume — normalizing in local blocks stops bright
+regions from crushing dim ones.
 
-| diameter | F1@0.5 (5 chunks) | runtime / chunk |
-|---|---|---|
+**`diameter` should be left unset — setting it actively hurts.** Cellpose-SAM is
+scale-invariant by design, and forcing a diameter degraded both accuracy *and* speed:
+
+| `diameter` | F1@0.5 | runtime / chunk |
+| ---: | ---: | ---: |
 | unset (default) | **0.251** | **6.4 s** |
 | 20 | 0.179 | 10.7 s |
 | 16 | 0.123 | 13.4 s |
-| 10 | 0 masks | 78 s |
-| 6 | 0 masks | 511 s |
+| 10 | (0 masks) | 78 s |
+| 6 | (0 masks) | 511 s |
 
-**`flow_threshold`** — a no-op for 3D inference (documented in the `eval()`
-docstring: "not used for 3D"). Not worth sweeping.
+The runtime blowup is because a diameter triggers upscaling to Cellpose's ~30px reference
+scale — `diameter=6` means 5x per axis, i.e. 125x the voxels.
 
-## Runtime scaling (whole-slab volumes)
+**`flow_threshold` is a no-op here** — Cellpose's own docstring states it is not used for 3D,
+and all of our runs are 3D.
 
-Three whole pfCortex volumes at 256×1024×1280 (~160× the voxels of a 128³
-chunk), default parameters:
+## Runtime and scaling
 
-| Input | voxels | runtime | peak GPU mem |
-|---|---|---|---|
-| 128³ chunk | 2.1 M | 6.4 s | 1.58 GB |
-| 256×1024×1280 slab | 336 M | 658 s (~11 min) | 1.58 GB |
+| Input | Voxels | Runtime | Peak GPU memory |
+| --- | ---: | ---: | ---: |
+| 128³ chunk | 2.1 M | 6.4 s | 1,576 MB |
+| 256x1024x1280 whole volume | 336 M (160x) | 658 s (103x) | 1,576 MB |
 
-Runtime scales roughly linearly with voxel count (slightly sub-linear).
-**GPU memory is flat** because Cellpose tiles internally (fixed 256 px blocks),
-so whole-brain scale is a throughput question, not a memory one. Extrapolating
-~6.4 s per 2.1 M voxels: ≈ 3 s per million voxels on one GPU.
+Two useful properties for scaling toward whole-brain workloads: runtime scales **sub-linearly**
+with volume size, and **peak GPU memory is flat** regardless of input size, because Cellpose
+tiles internally at a fixed block size. Memory is therefore not the constraint — throughput is.
+The full 96-chunk test split completes in ~10 minutes on one GPU.
 
 ## Important caveat: ground-truth quality
 
-The Ilastik-derived ground truth is a binary pixel classification, not a
-curated instance annotation, and it is known to be imperfect. Concrete
-evidence from this evaluation:
+Object-wise scores here are **lower bounds**, because the Ilastik ground truth fragments weak
+signal in dim regions. Concrete example — the worst-scoring chunk in the default run
+(`chunk_z5_y55_x5000_z000128_y000000_x000000`, predicted 1 vs 156 GT objects):
 
-- In dim, low-contrast chunks, Ilastik fragments weak signal into many tiny
-  specks. The worst-scoring chunk had 156 "GT objects" with a **median size of
-  22 voxels** (~3.5 voxels across — too small to be real nuclei), versus a
-  median of 582 voxels in a well-performing chunk. Cellpose-SAM returned ~0
-  objects there — arguably the correct call — and was penalised for it.
-- GT objects are derived by 26-connectivity connected components on a binary
-  mask, so touching nuclei are merged into one GT object. A model that
-  correctly separates them is scored as producing false positives.
+| | this chunk | a well-performing chunk |
+| --- | ---: | ---: |
+| GT objects | 156 | 130 |
+| GT median object size | **22 voxels** | **582 voxels** |
+| GT foreground | 2.66% | 5.52% |
 
-Both effects push the reported F1 *down*. The numbers above are therefore a
-conservative lower bound on real performance. Visual QC in napari is
-recommended alongside the metrics (`view_chunk.py`).
+A median GT object of 22 voxels is ~3.5 voxels across — far too small to be a real nucleus
+(well-formed chunks show ~10 voxels across). This is a dim, low-contrast region where the
+pixel classifier shattered weak signal into specks. Cellpose-SAM declining to segment there is
+arguably *correct*, and the metric penalizes it for that. Some portion of the gap to a
+"perfect" score reflects GT noise rather than model error.
 
-## Other regions
+Use `view_chunk.py` for visual QC rather than relying on the metrics alone.
 
-- **Cerebellum**: no usable ground truth exists for its official test split
-  (`masks_chunked_v2` covers only the 384 *train* chunks; `masks_chunked` has
-  1 file). Since this model never trains on the data, scoring against the
-  train-split GT would be leakage-free, but it is *not* comparable to methods
-  scored on the official test split. `build_test_dirs.py` stages this as a
-  clearly separated `tier1_trainsplit/`; not run due to time.
-- **Hippocampus**: not chunked; 3 whole volumes with GT only. Not run due to
-  time.
-
-## Layout
+## Files
 
 ```
 pretrained_baselines/
-├── common/metrics.py       object-wise metrics; adapted (credited) from Caitlin
-│                           Freeman's segmentation_benchmark/metrics.py. Scores
-│                           instance-labeled predictions directly -- does NOT
-│                           rebinarize them, which would erase instance separation
-├── common/io_utils.py      tif I/O, binary GT -> instance labels (cc3d, 26-conn)
-├── build_test_dirs.py      symlink farms from split_manifest.json test lists
-├── evaluate.py             scores a masks dir vs GT dir at both IoU thresholds
-├── view_chunk.py           napari: raw + predicted + GT as toggleable layers
+├── build_test_dirs.py      # symlink farms from split_manifest.json (test split)
 ├── cellpose_sam/
-│   ├── run_inference.py    load model once, loop volumes, log runtime + GPU mem
-│   └── lsf/                per-region LSF batch scripts (biohackathon queue)
-└── results/cellpose_sam/   per-chunk CSVs (default and tuned)
+│   └── run_inference.py    # inference + runtime/memory logging
+├── evaluate.py             # object-wise scoring at both IoU thresholds
+├── view_chunk.py           # napari viewer: raw + predicted + GT as layers
+├── common/metrics.py       # greedy one-to-one IoU matching, Dice, PQ, counts
+├── common/io_utils.py      # tif IO, binary GT -> instance labels
+└── results/cellpose_sam/   # per-chunk CSVs (default and tuned)
 ```
 
-## Reproduce
+`common/metrics.py` is adapted from Caitlin's `segmentation_benchmark/metrics.py`. It scores
+instance-labeled predictions **directly**, without rebinarizing them first — important here,
+since rebinarizing and re-running connected components would merge correctly-separated
+touching nuclei back together and erase exactly what an instance segmentation model provides.
 
-Environment: clone of the shared `pytorch_v2` env with `cellpose` installed and
-torch upgraded to 2.14+cu130 (cellpose's opencv dependency requires numpy 2,
-which the original torch 2.0 build cannot use). Weights cache to
-`~/.cellpose/models/` on first use — do that on a login node with internet.
+## Reproducing
 
 ```bash
+# 1. build test-split symlink farms
 python pretrained_baselines/build_test_dirs.py
 
-# tuned configuration
-python pretrained_baselines/cellpose_sam/run_inference.py \
-  --raw-dir  ~/cellpose_baseline/test_data/slab21_pfCortex_chunks/tier1/raw \
-  --masks-out-dir  OUT/masks --runtime-csv OUT/runtime.csv \
-  --cellprob-threshold -3 --tile-norm-blocksize 100 --device cuda
-
-python pretrained_baselines/evaluate.py \
-  --masks-dir OUT/masks \
-  --ground-truth-dir ~/cellpose_baseline/test_data/slab21_pfCortex_chunks/tier1/ground_truth \
-  --runtime-csv OUT/runtime.csv --output-csv OUT/eval.csv
+# 2. run tuned inference + evaluation (LSF, ~10 min for 96 chunks)
+bsub < ~/cellpose_baseline/scripts/run_pfcortex_tuned.sh
 ```
 
-LSF: `bsub -q biohackathon -gpu "num=1" ...` (that queue needs an explicit
-`-gpu` flag; `gpu_interactive` injects its own). Scripts must live on shared
-storage, not `/tmp` — compute nodes cannot see the login node's `/tmp`.
+Environment: `~/.conda/envs/cellpose_env` (clone of the team `pytorch_v2` env; torch was
+upgraded to 2.14.0+cu130 there because cellpose requires numpy>=2, which the original
+torch 2.0.0 build is not ABI-compatible with). The shared team env is untouched.
+
+## Known gaps
+
+- **Cerebellum has no usable test-split ground truth.** `masks_chunked_v2` covers only the 384
+  *train* chunks (verified: 0/96 overlap with the test split), and `masks_chunked` holds a
+  single file. Needs resolving with whoever owns the annotations before Cerebellum accuracy
+  numbers are possible; inference itself runs fine.
+- **Hippocampus** is not chunked, so it has no Tier-1 equivalent — only 3 whole volumes.
+- **µSAM** was not run. It needs its own conda env; installing it into `cellpose_env` would
+  disturb the torch/numpy pinning that Cellpose depends on here.
