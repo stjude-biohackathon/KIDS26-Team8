@@ -52,19 +52,25 @@ are `chunk_z5_y36_x0.tif`, `chunk_z5_y45_x2500.tif`, `chunk_z5_y55_x5000.tif`.
 Tuned vs. ground truth on a well-performing chunk (tuned F1@0.5 = 0.56):
 
 raw: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw_chunked/chunk_z5_y55_x5000_z000000_y000768_x001024.tif
+
 predicted: /home/efoste34/cellpose_baseline/runs/cellpose_sam_tuned/slab21_pfCortex_chunks/tier1/masks/chunk_z5_y55_x5000_z000000_y000768_x001024.tif 
+
 ground-truth: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks_chunked/chunk_z5_y55_x5000_z000000_y000768_x001024.tif
 
 The dim chunk where ground truth is noisy
 
 raw: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw_chunked/chunk_z5_y55_x5000_z000128_y000000_x000000.tif
+
 predicted: /home/efoste34/cellpose_baseline/runs/cellpose_sam_tuned/slab21_pfCortex_chunks/tier1/masks/chunk_z5_y55_x5000_z000128_y000000_x000000.tif
+
 ground-truth: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks_chunked/chunk_z5_y55_x5000_z000128_y000000_x000000.tif
 
 A dense whole volume (predicted 9,864 vs 16,350 GT nuclei at default settings):
 
 raw: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/raw/chunk_z5_y55_x5000.tif
+
 predicted: /home/efoste34/cellpose_baseline/runs/cellpose_sam/slab21_pfCortex_chunks/tier2/masks/chunk_z5_y55_x5000.tif
+
 ground-truth: /lustre_scratch/shared_scratch/hillmanLab/hackathonData_2026/slab21_pfCortex_chunks/masks/chunk_z5_y55_x5000.tif
 
 ## Setup
