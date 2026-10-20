@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nuclei-stage1"
+version = "0.3.0"
+description = "Classical (percentile or band-pass mask + seeded watershed) nuclei instance segmentation for tiled lightsheet brain volumes, with chunk stitching and an experimental automatic per-chunk parameter selector."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.24", "scipy>=1.10", "scikit-image>=0.21", "tifffile>=2023.1.1", "pandas>=1.5", "matplotlib>=3.5", "pillow>=9"]
+
+[project.optional-dependencies]
+view = ["napari[all]>=0.4.19"]
+movie = ["imageio>=2.30", "imageio-ffmpeg>=0.4.9"]
+test = ["pytest>=7"]
+
+[project.scripts]
+nuclei-run-slab = "nuclei_stage1.run_slab:main"
+nuclei-stitch = "nuclei_stage1.stitch:main"
+nuclei-view-slab = "nuclei_stage1.view_slab:main"
+nuclei-save-pairs = "nuclei_stage1.save_slab_pair:main"
+nuclei-spin = "nuclei_stage1.spin_slab_pair:main"
+nuclei-voxel-check = "nuclei_stage1.check_voxel_scale:main"
+nuclei-tune = "nuclei_stage1.tune:main"
+nuclei-autoconfig = "nuclei_stage1.autoconfig:main"
+nuclei-eval-dispatch = "nuclei_stage1.evaluate_dispatch:main"
+nuclei-compare-preset = "nuclei_stage1.compare_preset:main"
+nuclei-evaluate = "nuclei_stage1.evaluate:main"
+nuclei-deskew = "nuclei_stage1.deskew:main"
+nuclei-qc = "nuclei_stage1.qc:main"
+
+[tool.setuptools]
+packages = ["nuclei_stage1", "nuclei_stage1.experimental"]
+
+[tool.setuptools.package-data]
+nuclei_stage1 = ["exemplars.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
