@@ -1,0 +1,55 @@
+#!/bin/bash
+# Example LSF job: stage 1 on ONE slab. Edit the three PLACEHOLDER lines for your cluster, then:
+#
+#   BASE_DIR=/path/to/data SLAB=my_slab_chunks bsub < scripts/submit_slab.lsf              # plain, per-tile
+#   STITCH=1 BASE_DIR=... SLAB=... bsub < scripts/submit_slab.lsf                          # plain + merge pieces across tile faces
+#   RESUME=1 BASE_DIR=... SLAB=... bsub < scripts/submit_slab.lsf                          # continue after a time-out
+#   PRESET=hippocampus BASE_DIR=... SLAB=... bsub < scripts/submit_slab.lsf                # tissue-specific parameter set (config.PRESETS)
+#   ADAPTIVE=1 BASE_DIR=... SLAB=... bsub < scripts/submit_slab.lsf                        # EXPERIMENTAL per-tile settings, see docs/AUTO_CONFIG.md
+#
+#BSUB -J "nuclei_slab"
+#BSUB -o logs/nuclei_slab_%J.out
+#BSUB -e logs/nuclei_slab_%J.err
+#BSUB -n 8
+#BSUB -R "span[hosts=1] rusage[mem=65536]"
+#BSUB -W 08:00
+
+set -euo pipefail
+mkdir -p logs
+
+: "${BASE_DIR:?set BASE_DIR to the folder that contains your slab folders}"
+: "${SLAB:?set SLAB to the slab folder name, e.g. SLAB=slab21_chunks}"
+SLAB_DIR="$BASE_DIR/$SLAB"
+[ -d "$SLAB_DIR" ] || { echo "ERROR: $SLAB_DIR does not exist" >&2; exit 1; }
+
+# PLACEHOLDER: load your Python environment (needs numpy scipy scikit-image tifffile pandas, and this package:
+# `pip install -e .` once, or run from the repo root).
+# source /path/to/conda.sh && conda activate stage1
+export PYTHONUNBUFFERED=1
+export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1   # one thread per worker process
+
+N=$(ls "$SLAB_DIR/raw_chunked" 2>/dev/null | wc -l)
+echo "slab: $SLAB_DIR   tiles in raw_chunked: $N"
+[ "$N" -gt 0 ] || { echo "ERROR: no tiles in $SLAB_DIR/raw_chunked" >&2; exit 1; }
+
+EXTRA=""
+if [ "${RESUME:-0}" = "1" ]; then
+  EXTRA="--skip-existing"
+else
+  STAMP=$(date +%Y%m%d_%H%M%S)      # move earlier results aside so this run cannot overwrite them
+  for d in labels centroids labels_stitched; do
+    [ -d "$SLAB_DIR/$d" ] && mv "$SLAB_DIR/$d" "$SLAB_DIR/${d}_prev_$STAMP" && echo "moved $d -> ${d}_prev_$STAMP"
+  done
+fi
+
+python -c "from nuclei_stage1 import Stage1Config; print('PARAMS:', Stage1Config())"
+
+W=${LSB_DJOB_NUMPROC:-8}
+python -m nuclei_stage1.run_slab "$SLAB_DIR" --workers "$W" ${PRESET:+--preset $PRESET} ${ADAPTIVE:+--adaptive} ${FAST_EDT:+--fast-edt} $EXTRA
+if [ "${STITCH:-0}" = "1" ]; then python -m nuclei_stage1.stitch "$SLAB_DIR" --workers "$W"; fi
+
+# QC report (never fails the run): <slab>/qc/qc_report.html (short), qc_detailed.html (every flagged tile),
+# qc_review_list.csv, qc_audit_sample.csv.  Skip it with QC=0.
+if [ "${QC:-1}" = "0" ]; then echo "QC=0: skipping the QC report"; else
+python -m nuclei_stage1.qc "$SLAB_DIR" --workers "$W" || echo "QC report failed (the segmentation itself is fine); run it by hand: python -m nuclei_stage1.qc $SLAB_DIR"
+fi

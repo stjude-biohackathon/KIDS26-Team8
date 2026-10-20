@@ -1,0 +1,56 @@
+[
+  {
+    "name": "pfc_chunk1",
+    "descriptors": {
+      "zero_frac": 0.0,
+      "usable": true,
+      "median": 3392.0,
+      "robust_sigma": 498.1536,
+      "fg_frac_k2": 0.06665325164794922,
+      "fg_frac_k3": 0.030263423919677734,
+      "fg_frac_k5": 0.0070209503173828125,
+      "contrast_p99": 4.52872371673584,
+      "blobs_per_mvox": 23.365020751953125,
+      "n_blobs": 49
+    },
+    "match_vec": [
+      -3.497815427000511,
+      3.1512400643160494,
+      1.5104401595637926
+    ],
+    "overrides": {},
+    "tuned_f1": 0.796,
+    "gt": "gt_chunk1.tif (118 nuclei, z 1:127)"
+  },
+  {
+    "name": "hippo_chunk3",
+    "descriptors": {
+      "zero_frac": 0.0,
+      "usable": true,
+      "median": 3408.0,
+      "robust_sigma": 450.7104,
+      "fg_frac_k2": 0.053408145904541016,
+      "fg_frac_k3": 0.0180816650390625,
+      "fg_frac_k5": 0.0028581619262695312,
+      "contrast_p99": 3.5854508876800537,
+      "blobs_per_mvox": 14.781951904296875,
+      "n_blobs": 31
+    },
+    "match_vec": [
+      -4.0128568353898935,
+      2.693406970690569,
+      1.2768842367651734
+    ],
+    "overrides": {
+      "mask_bandpass_um": [
+        2.0,
+        8.0
+      ],
+      "target_foreground_percentile": 94.0,
+      "min_seed_distance": 12,
+      "seed_landscape_smooth_um": 1.0
+    },
+    "tuned_f1": 0.8,
+    "gt": "gt_chunk3.tif (74 nuclei)"
+  }
+]
